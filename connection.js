@@ -18,6 +18,7 @@ async function main(callback) {
     console.error(e);
     throw new Error("Unable to connect to Database");
   } finally {
+    // it will time out the tests from fcc
     await client.close();
   }
 }

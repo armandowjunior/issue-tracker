@@ -11,24 +11,16 @@ module.exports = function (app) {
       let project = req.params.project;
       const query = req.query;
 
-      console.log(query);
-      for (let prop in query) {
-        if (prop === "open") {
-          // if the prop exist in the query
-          if (query.open === "true") query.open = true; // change the type from string to boolean
-          if (query.open === "false") query.open = false;
-        } else if (prop === "_id") {
-          query._id = ObjectID(query._id); // change the type from string to ObjectID;
-        }
+      if (query.open) {
+        // if the prop exist in the query
+        if (query.open === "true") query.open = true; // change the type from string to boolean
+        if (query.open === "false") query.open = false;
+      } else if (query._id) {
+        query._id = ObjectID(query._id); // change the type from string to ObjectID;
       }
 
-      console.log(query);
-
       myDB(async (client) => {
-        const cursor = await client
-          .db("issue_tracker")
-          .collection(project)
-          .find(query);
+        const cursor = await client.db().collection(project).find(query);
 
         // Store the results in an array
         const issues = await cursor.toArray();
@@ -54,7 +46,7 @@ module.exports = function (app) {
 
       myDB(async (client) => {
         const issue = await client
-          .db("issue_tracker")
+          .db()
           .collection(project)
           .insertOne({
             issue_title,
@@ -62,9 +54,9 @@ module.exports = function (app) {
             created_on: new Date(),
             updated_on: new Date(),
             created_by,
-            assigned_to,
+            assigned_to: assigned_to || "",
             open: true,
-            status_text,
+            status_text: status_text || "",
           });
         res.json(issue.ops[0]);
       }).catch(console.error);
@@ -80,14 +72,26 @@ module.exports = function (app) {
         created_by,
         assigned_to,
         status_text,
+        open,
       } = req.body;
 
       // Check for errors - Missing id
       if (!_id) return res.json({ error: "missing _id" });
 
+      if (
+        !issue_title &&
+        !issue_text &&
+        !created_by &&
+        !assigned_to &&
+        !status_text &&
+        !open
+      ) {
+        return res.json({ error: "no update field(s) sent", _id: _id });
+      }
+
       myDB(async (client) => {
         const issue = await client
-          .db("issue_tracker")
+          .db()
           .collection(project)
           .updateOne(
             { _id: ObjectID(_id) }, // pass the object as type ObjectID to the DB, instead of string;
@@ -108,7 +112,9 @@ module.exports = function (app) {
         );
         console.log(`${issue.modifiedCount} document(s) was/were updated.`);
 
-        // Return update successful
+        if (issue.matchedCount === 0)
+          return res.json({ error: "could not update", _id: _id });
+
         if (issue.modifiedCount > 0)
           return res.json({ result: "successfully updated", _id: _id });
       }).catch(console.error);
@@ -124,17 +130,17 @@ module.exports = function (app) {
 
       myDB(async (client) => {
         const issue = await client
-          .db("issue_tracker")
+          .db()
           .collection(project)
           .deleteOne({ _id: ObjectID(req.body._id) });
         console.log(`${issue.deletedCount} document(s) was/were deleted.`);
 
+        if (issue.deletedCount === 0)
+          return res.json({ error: "could not delete", _id: _id });
+
         // Return delete result
         if (issue.deletedCount > 0)
           return res.json({ result: "successfully deleted", _id: _id });
-
-        if (issue.deleteCount <= 0)
-          return res.json({ error: "could not delete", _id: _id });
       }).catch(console.error);
     });
 };
